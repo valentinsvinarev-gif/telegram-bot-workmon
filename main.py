@@ -6,6 +6,8 @@ from starlette.applications import Starlette
 from starlette.responses import PlainTextResponse
 from starlette.routing import Route
 from datetime import datetime
+from telegram import ReplyKeyboardMarkup
+from telegram.ext import MessageHandler, filters
 
 DB_PATH = "data.db"
 
@@ -33,9 +35,19 @@ if not TOKEN or not URL:
 app_bot = Application.builder().token(TOKEN).build()
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text("Бот запущен!")
+    keyboard = [
+        ["➕ Добавить", "📋 Проверить"],
+    ]
 
-app_bot.add_handler(CommandHandler("start", start))
+    reply_markup = ReplyKeyboardMarkup(
+        keyboard,
+        resize_keyboard=True
+    )
+
+    await update.message.reply_text(
+        "Выберите действие:",
+        reply_markup=reply_markup
+    )
 
 
 
@@ -62,6 +74,20 @@ async def add(update: Update, context: ContextTypes.DEFAULT_TYPE):
         f"Записано:\nДеталь: {part}\nЦех: {shop}\nВремя: {ts}"
     )
 app_bot.add_handler(CommandHandler("add", add))
+
+async def menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    text = update.message.text
+
+    if text == "➕ Добавить":
+        await update.message.reply_text(
+            "Введите:\n/add <обозначение> <цех>\n\nПример:\n/add 10.00.00.001 04"
+        )
+
+    elif text == "📋 Проверить":
+        await update.message.reply_text(
+            "Введите:\n/history <обозначение>\n\nПример:\n/history 10.00.00.001"
+        )
+app_bot.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, menu))
 
 async def history(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if len(context.args) != 1:
@@ -138,6 +164,7 @@ async def shutdown_event():
     await app_bot.shutdown()
 
 # ===== Команда /add =====
+
 
 
 
