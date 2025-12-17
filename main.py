@@ -35,6 +35,7 @@ if not TOKEN or not URL:
 app_bot = Application.builder().token(TOKEN).build()
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+  
     keyboard = [
         ["➕ Добавить", "📋 Проверить"],
     ]
@@ -48,7 +49,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "Выберите действие:",
         reply_markup=reply_markup
     )
-
+app_bot.add_handler(CommandHandler("start", start))
 
 
 async def add(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -75,19 +76,6 @@ async def add(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
 app_bot.add_handler(CommandHandler("add", add))
 
-async def menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    text = update.message.text
-
-    if text == "➕ Добавить":
-        await update.message.reply_text(
-            "Введите:\n/add <обозначение> <цех>\n\nПример:\n/add 10.00.00.001 04"
-        )
-
-    elif text == "📋 Проверить":
-        await update.message.reply_text(
-            "Введите:\n/history <обозначение>\n\nПример:\n/history 10.00.00.001"
-        )
-app_bot.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, menu))
 
 async def history(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if len(context.args) != 1:
@@ -118,6 +106,21 @@ async def history(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(text)
 
 app_bot.add_handler(CommandHandler("history", history))
+
+async def menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    text = update.message.text
+
+    if text == "➕ Добавить":
+        await update.message.reply_text(
+            "Введите:\n/add <обозначение> <цех>\n\nПример:\n/add 10.00.00.001 04"
+        )
+
+    elif text == "📋 Проверить":
+        await update.message.reply_text(
+            "Введите:\n/history <обозначение>\n\nПример:\n/history 10.00.00.001"
+        )
+app_bot.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, menu))
+
 
 # ===== Webhook =====
 async def webhook(request):
@@ -164,6 +167,7 @@ async def shutdown_event():
     await app_bot.shutdown()
 
 # ===== Команда /add =====
+
 
 
 
