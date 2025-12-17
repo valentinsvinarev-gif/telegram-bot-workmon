@@ -1,9 +1,27 @@
 import os
+import sqlite3
 from telegram import Update
 from telegram.ext import Application, CommandHandler, ContextTypes
 from starlette.applications import Starlette
 from starlette.responses import PlainTextResponse
 from starlette.routing import Route
+from datetime import datetime
+
+DB_PATH = "data.db"
+
+def init_db():
+    conn = sqlite3.connect(DB_PATH)
+    cur = conn.cursor()
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS movements (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            part TEXT NOT NULL,
+            shop TEXT NOT NULL,
+            ts TEXT NOT NULL
+        )
+    """)
+    conn.commit()
+    conn.close()
 
 TOKEN = os.environ.get("BOT_TOKEN")
 URL   = os.environ.get("RENDER_EXTERNAL_URL")
@@ -19,6 +37,61 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 app_bot.add_handler(CommandHandler("start", start))
 
+
+
+async def add(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if len(context.args) != 2:
+        await update.message.reply_text(
+            "Использование:\n/add <обозначение> <цех>\n\nПример:\n/add 10.00.00.001 04"
+        )
+        return
+
+    part, shop = context.args
+    ts = datetime.now().strftime("%d.%m.%Y %H:%M")
+
+    conn = sqlite3.connect(DB_PATH)
+    cur = conn.cursor()
+    cur.execute(
+        "INSERT INTO movements (part, shop, ts) VALUES (?, ?, ?)",
+        (part, shop, ts)
+    )
+    conn.commit()
+    conn.close()
+
+    await update.message.reply_text(
+        f"Записано:\nДеталь: {part}\nЦех: {shop}\nВремя: {ts}"
+    )
+app_bot.add_handler(CommandHandler("add", add))
+
+async def history(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if len(context.args) != 1:
+        await update.message.reply_text(
+            "Использование:\n/history <обозначение>"
+        )
+        return
+
+    part = context.args[0]
+
+    conn = sqlite3.connect(DB_PATH)
+    cur = conn.cursor()
+    cur.execute(
+        "SELECT shop, ts FROM movements WHERE part = ? ORDER BY id",
+        (part,)
+    )
+    rows = cur.fetchall()
+    conn.close()
+
+    if not rows:
+        await update.message.reply_text("Записей не найдено")
+        return
+
+    text = f"История детали {part}:\n"
+    for shop, ts in rows:
+        text += f"{shop} — {ts}\n"
+
+    await update.message.reply_text(text)
+
+app_bot.add_handler(CommandHandler("history", history))
 
 # ===== Webhook =====
 async def webhook(request):
@@ -52,6 +125,9 @@ async def startup_event():
     await app_bot.bot.set_webhook(webhook_url)
 
     print("Webhook установлен, бот готов к работе")
+    
+    init_db()
+    print("База данных инициализирована")
 
 
 # ===== SHUTDOWN =====
@@ -60,3 +136,8 @@ async def shutdown_event():
     print("Остановка бота...")
     await app_bot.stop()
     await app_bot.shutdown()
+
+# ===== Команда /add =====
+
+
+
