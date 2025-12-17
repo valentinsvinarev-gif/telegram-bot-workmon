@@ -38,7 +38,18 @@ app = Starlette(routes=routes)
 # Set webhook on startup
 @app.on_event("startup")
 async def startup_event():
+    if not URL:
+        print("ERROR: RENDER_EXTERNAL_URL не задан!")
+        return
+
     webhook_url = f"{URL}/telegram"
+    
+    # Отладочный вывод
+    print(f"Попытка установки webhook на URL: {webhook_url}")
+    
     await app_bot.bot.set_webhook(webhook_url)
+    print("Webhook установлен!")
+
+
 
 
