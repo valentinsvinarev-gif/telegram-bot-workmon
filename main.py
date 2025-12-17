@@ -5,9 +5,9 @@ from starlette.applications import Starlette
 from starlette.responses import PlainTextResponse
 from starlette.routing import Route
 
-TOKEN = os.environ["BOT_TOKEN"]
+TOKEN = os.environ.get("BOT_TOKEN")
 PORT  = int(os.environ.get("PORT", 8000))
-URL   = os.environ.get["RENDER_EXTERNAL_URL"]  # Render сам подставит URL
+URL   = os.environ.get("RENDER_EXTERNAL_URL")  # правильный способ
 
 # Telegram bot
 app_bot = Application.builder().token(TOKEN).build()
@@ -40,4 +40,5 @@ app = Starlette(routes=routes)
 async def startup_event():
     webhook_url = f"{URL}/telegram"
     await app_bot.bot.set_webhook(webhook_url)
+
 
