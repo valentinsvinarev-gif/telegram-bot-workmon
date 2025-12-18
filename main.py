@@ -10,7 +10,7 @@ from telegram import ReplyKeyboardMarkup
 from telegram.ext import MessageHandler, filters
 
 DB_PATH = "data.db"
-
+       
 def init_db():
     conn = sqlite3.connect(DB_PATH)
     cur = conn.cursor()
@@ -35,92 +35,128 @@ if not TOKEN or not URL:
 app_bot = Application.builder().token(TOKEN).build()
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-  
+    context.user_data.clear()  # ← СБРОС СОСТОЯНИЯ
+
     keyboard = [
         ["➕ Добавить", "📋 Проверить"],
     ]
 
     reply_markup = ReplyKeyboardMarkup(
         keyboard,
-        resize_keyboard=True
+        resize_keyboard=True,
+        is_persistent=True
     )
 
     await update.message.reply_text(
         "Выберите действие:",
         reply_markup=reply_markup
     )
-app_bot.add_handler(CommandHandler("start", start))
 
-
-async def add(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if len(context.args) != 2:
-        await update.message.reply_text(
-            "Использование:\n/add <обозначение> <цех>\n\nПример:\n/add 10.00.00.001 04"
-        )
-        return
-
-    part, shop = context.args
-    ts = datetime.now().strftime("%d.%m.%Y %H:%M")
-
-    conn = sqlite3.connect(DB_PATH)
-    cur = conn.cursor()
-    cur.execute(
-        "INSERT INTO movements (part, shop, ts) VALUES (?, ?, ?)",
-        (part, shop, ts)
-    )
-    conn.commit()
-    conn.close()
-
-    await update.message.reply_text(
-        f"Записано:\nДеталь: {part}\nЦех: {shop}\nВремя: {ts}"
-    )
-app_bot.add_handler(CommandHandler("add", add))
-
-
-async def history(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if len(context.args) != 1:
-        await update.message.reply_text(
-            "Использование:\n/history <обозначение>"
-        )
-        return
-
-    part = context.args[0]
-
-    conn = sqlite3.connect(DB_PATH)
-    cur = conn.cursor()
-    cur.execute(
-        "SELECT shop, ts FROM movements WHERE part = ? ORDER BY id",
-        (part,)
-    )
-    rows = cur.fetchall()
-    conn.close()
-
-    if not rows:
-        await update.message.reply_text("Записей не найдено")
-        return
-
-    text = f"История детали {part}:\n"
-    for shop, ts in rows:
-        text += f"{shop} — {ts}\n"
-
-    await update.message.reply_text(text)
-
-app_bot.add_handler(CommandHandler("history", history))
 
 async def menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    text = update.message.text
+    if update.message is None:
+        return
+    text = update.message.text.strip()
 
+    # --- КНОПКА ДОБАВИТЬ ---
     if text == "➕ Добавить":
-        await update.message.reply_text(
-            "Введите:\n/add <обозначение> <цех>\n\nПример:\n/add 10.00.00.001 04"
-        )
+        context.user_data.clear()
+        context.user_data["mode"] = "add"
+        context.user_data["step"] = "part"
 
-    elif text == "📋 Проверить":
-        await update.message.reply_text(
-            "Введите:\n/history <обозначение>\n\nПример:\n/history 10.00.00.001"
-        )
-app_bot.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, menu))
+        await update.message.reply_text("Введите обозначение детали:")
+        return
 
+    # --- КНОПКА ПРОВЕРИТЬ ---
+    if text == "📋 Проверить":
+        context.user_data.clear()
+        context.user_data["mode"] = "history"
+        context.user_data["step"] = "part"
+
+        await update.message.reply_text("Введите обозначение детали:")
+        return
+
+    # --- ОБРАБОТКА ВВОДА ---
+    await process_input(update, context)
+
+
+async def process_input(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if update.message is None:
+        return
+
+    if "mode" not in context.user_data:
+        return
+
+    text = update.message.text.strip()
+
+    # ===== ДОБАВЛЕНИЕ =====
+    if context.user_data["mode"] == "add":
+
+        # Шаг 1 — ввод детали
+        if context.user_data.get("step") == "part":
+            context.user_data["part"] = text
+            context.user_data["step"] = "shop"
+
+            await update.message.reply_text("Введите номер цеха:")
+            return
+
+        # Шаг 2 — ввод цеха
+        if context.user_data.get("step") == "shop":
+
+            if not text.isdigit():
+                await update.message.reply_text("Введите номер цеха (число)")
+                return
+
+            part = context.user_data["part"]
+            shop = text
+            ts = datetime.now().strftime("%d.%m.%Y %H:%M")
+
+            conn = sqlite3.connect(DB_PATH)
+            cur = conn.cursor()
+            cur.execute(
+                "INSERT INTO movements (part, shop, ts) VALUES (?, ?, ?)",
+                (part, shop, ts)
+            )
+            conn.commit()
+            conn.close()
+
+            context.user_data.clear()
+
+            await update.message.reply_text(
+                f"✅ Записано:\nДеталь: {part}\nЦех: {shop}\nВремя: {ts}"
+            )
+            return
+
+    # ===== ПРОВЕРКА =====
+    if context.user_data["mode"] == "history":
+
+        part = text
+
+        conn = sqlite3.connect(DB_PATH)
+        cur = conn.cursor()
+        cur.execute(
+            "SELECT shop, ts FROM movements WHERE part = ? ORDER BY id",
+            (part,)
+        )
+        rows = cur.fetchall()
+        conn.close()
+
+        context.user_data.clear()
+
+        if not rows:
+            await update.message.reply_text("Записей не найдено")
+            return
+
+        msg = f"История детали {part}:\n"
+        for shop, ts in rows:
+            msg += f"{shop} — {ts}\n"
+
+        await update.message.reply_text(msg)
+
+app_bot.add_handler(CommandHandler("start", start))
+app_bot.add_handler(
+    MessageHandler(filters.TEXT & ~filters.COMMAND, menu)
+)
 
 # ===== Webhook =====
 async def webhook(request):
@@ -165,10 +201,6 @@ async def shutdown_event():
     print("Остановка бота...")
     await app_bot.stop()
     await app_bot.shutdown()
-
-# ===== Команда /add =====
-
-
 
 
 
